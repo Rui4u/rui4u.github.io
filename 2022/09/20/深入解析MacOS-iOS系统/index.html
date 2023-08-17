@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 6.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":{"gitalk":null}},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="第四章：庖丁解进程：mach-o格式、进程以及线程内幕权限对应数字   x : 1   w : 2   r : 4 对应二进制为   001   010  100 常见指令  a.out 为可执行文件">
+<meta property="og:type" content="article">
+<meta property="og:title" content="深入解析MacOS&amp;iOS系统">
+<meta property="og:url" content="http://example.com/2022/09/20/%E6%B7%B1%E5%85%A5%E8%A7%A3%E6%9E%90MacOS-iOS%E7%B3%BB%E7%BB%9F/index.html">
+<meta property="og:site_name" content="沙睿的小站">
+<meta property="og:description" content="第四章：庖丁解进程：mach-o格式、进程以及线程内幕权限对应数字   x : 1   w : 2   r : 4 对应二进制为   001   010  100 常见指令  a.out 为可执行文件">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://example.com/media/16481778312357.jpg">
+<meta property="og:image" content="http://example.com/media/16492999750347.jpg">
+<meta property="og:image" content="http://example.com/media/16493899083301.jpg">
+<meta property="og:image" content="http://example.com/media/16496435460839.jpg">
+<meta property="og:image" content="http://example.com/media/16496485360103.jpg">
+<meta property="og:image" content="http://example.com/media/16497303287049.jpg">
+<meta property="og:image" content="http://example.com/media/16497355830436.jpg">
+<meta property="og:image" content="http://example.com/media/16497347520925.jpg">
+<meta property="og:image" content="http://example.com/media/16498178652114.jpg">
+<meta property="og:image" content="http://example.com/media/16508518978704.jpg">
+<meta property="og:image" content="http://example.com/media/16508581242342.jpg">
+<meta property="og:image" content="http://example.com/media/16508581342931.jpg">
+<meta property="og:image" content="http://example.com/media/16508581633859.jpg">
+<meta property="og:image" content="http://example.com/media/16508582863471.jpg">
+<meta property="og:image" content="http://example.com/media/16508582993879.jpg">
+<meta property="article:published_time" content="2022-09-20T08:50:24.000Z">
+<meta property="article:modified_time" content="2023-08-17T09:04:26.174Z">
+<meta property="article:author" content="沙睿">
+<meta property="article:tag" content="读书笔记">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/media/16481778312357.jpg">
+
+<link rel="canonical" href="http://example.com/2022/09/20/%E6%B7%B1%E5%85%A5%E8%A7%A3%E6%9E%90MacOS-iOS%E7%B3%BB%E7%BB%9F/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>深入解析MacOS&iOS系统 | 沙睿的小站</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">沙睿的小站</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/20/%E6%B7%B1%E5%85%A5%E8%A7%A3%E6%9E%90MacOS-iOS%E7%B3%BB%E7%BB%9F/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="沙睿">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="沙睿的小站">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          深入解析MacOS&iOS系统
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-09-20 16:50:24" itemprop="dateCreated datePublished" datetime="2022-09-20T16:50:24+08:00">2022-09-20</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%B7%B1%E5%85%A5%E8%A7%A3%E6%9E%90MacOS-iOS%E7%B3%BB%E7%BB%9F/" itemprop="url" rel="index"><span itemprop="name">深入解析MacOS&iOS系统</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="第四章：庖丁解进程：mach-o格式、进程以及线程内幕"><a href="#第四章：庖丁解进程：mach-o格式、进程以及线程内幕" class="headerlink" title="第四章：庖丁解进程：mach-o格式、进程以及线程内幕"></a>第四章：庖丁解进程：mach-o格式、进程以及线程内幕</h1><p>权限对应数字   <code>x : 1</code>   <code>w : 2</code>   <code>r : 4</code></p>
+<p>对应二进制为   001   010  100</p>
+<p>常见指令</p>
+<blockquote>
+<p>a.out 为可执行文件</p>
+</blockquote>
+<span id="more"></span>
+<h5 id="otool"><a href="#otool" class="headerlink" title="otool"></a>otool</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">otool -l a.out  展示加载命令</span><br><span class="line">otool -p _main -tV a.out  // 二进制文件反汇编</span><br><span class="line">otool &quot;可执行文件路径&quot;   -p &quot;函数或者方法名&quot; -V -t   //反汇编</span><br></pre></td></tr></table></figure>
+<ol>
+<li>例子<figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//这是原始崩溃栈</span></span><br><span class="line">Pthread <span class="type">id</span>: <span class="number">1313098</span></span><br><span class="line"> Thread <span class="number">27</span> Crashed:</span><br><span class="line"><span class="number">0</span>   libsystem_kernel.dylib          <span class="number">0x00000001808f1014</span> __pthread_kill + <span class="number">8</span></span><br><span class="line"><span class="number">1</span>   libsystem_pthread.dylib         <span class="number">0x00000001809bb264</span> pthread_kill + <span class="number">112</span></span><br><span class="line"><span class="number">2</span>   libsystem_c.dylib               <span class="number">0x00000001808659c4</span> abort + <span class="number">140</span></span><br><span class="line"><span class="number">3</span>   libsystem_malloc.dylib          <span class="number">0x0000000180931828</span> szone_error + <span class="number">420</span></span><br><span class="line"><span class="number">4</span>   libsystem_malloc.dylib          <span class="number">0x000000018093b74c</span> <span class="number">0x180924000</span> + <span class="number">96076</span></span><br><span class="line"><span class="number">5</span>   libsystem_malloc.dylib          <span class="number">0x0000000180928994</span> <span class="number">0x180924000</span> + <span class="number">18836</span></span><br><span class="line"><span class="number">6</span>   libsystem_malloc.dylib          <span class="number">0x000000018093ba00</span> <span class="number">0x180924000</span> + <span class="number">96768</span></span><br><span class="line"><span class="number">7</span>   libsystem_malloc.dylib          <span class="number">0x000000018093c0c8</span> <span class="number">0x180924000</span> + <span class="number">98504</span></span><br><span class="line"><span class="number">8</span>   CoreFoundation                  <span class="number">0x00000001818a701c</span> <span class="number">0x1817ca000</span> + <span class="number">905244</span></span><br><span class="line"><span class="number">9</span>   testApp                         <span class="number">0x0000000103b9e5b8</span> __99-[XXX fn:queue:]_block_invoke + <span class="number">384</span></span><br><span class="line"><span class="number">10</span>  libdispatch.dylib               <span class="number">0x00000001807ae9e0</span> <span class="number">0x1807ad000</span> + <span class="number">6624</span></span><br><span class="line"><span class="number">11</span>  libdispatch.dylib               <span class="number">0x00000001807ae9a0</span> <span class="number">0x1807ad000</span> + <span class="number">6560</span></span><br><span class="line"><span class="number">12</span>  libdispatch.dylib               <span class="number">0x00000001807bcad4</span> <span class="number">0x1807ad000</span> + <span class="number">64212</span></span><br><span class="line"><span class="number">13</span>  libdispatch.dylib               <span class="number">0x00000001807b22cc</span> <span class="number">0x1807ad000</span> + <span class="number">21196</span></span><br><span class="line"><span class="number">14</span>  libdispatch.dylib               <span class="number">0x00000001807bea50</span> <span class="number">0x1807ad000</span> + <span class="number">72272</span></span><br><span class="line"><span class="number">15</span>  libdispatch.dylib               <span class="number">0x00000001807be7d0</span> <span class="number">0x1807ad000</span> + <span class="number">71632</span></span><br><span class="line"><span class="number">16</span>  libsystem_pthread.dylib         <span class="number">0x00000001809b7100</span> _pthread_wqthread + <span class="number">1096</span></span><br><span class="line"></span><br><span class="line"></span><br><span class="line">Binary Images:</span><br><span class="line">       <span class="number">0x1000b8000</span> -        <span class="number">0x108263fff</span> +testApp arm64  &lt;cb8cc0075ed4352b802c6c586b8a93d5&gt; /var/containers/Bundle/Application/<span class="number">0</span>A1F4541<span class="number">-8749</span><span class="number">-4</span>F9D-B60A<span class="number">-813</span>FFEE69CA6/testApp.app/testApp</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">本例的问题使用otool如下：</span><br><span class="line">otool命令中 -p 后面跟的是方法名或者函数名或者符号名。 这里需要注意的时因为系统编译时可能会在函数名或者符号名前多增加一个下划线_ 因此在指定符号名时需要多增加一个_。 -V 是表明打印函数对应的汇编代码。 -t 是表明打印代码段中的代码。</span><br><span class="line">  otool <span class="string">&quot;/Users/apple/Downloads/Payload/testApp.app/testApp&quot;</span> -p <span class="string">&quot;___99-[XXX fn:queue:]_block_invoke&quot;</span> -V -t </span><br></pre></td></tr></table></figure></li>
+</ol>
+<h5 id="nm"><a href="#nm" class="headerlink" title="nm"></a>nm</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">nm a.out // 显示二进制符号表  </span><br><span class="line">nm a.out | grep &quot;U&quot;  // 显示未绑定的二进制符号表</span><br><span class="line">nm -m a.out // 显示二进制符号表在哪个段内</span><br><span class="line">nm a.out | wc -l // 表中一共有多少符号</span><br></pre></td></tr></table></figure>
+
+<h4 id="xcrun-dyldinfo"><a href="#xcrun-dyldinfo" class="headerlink" title="xcrun dyldinfo"></a>xcrun dyldinfo</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">xcrun dyldinfo a.out // 显示dyld信息，包括绑定，重定向信息等</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="dyld"><a href="#dyld" class="headerlink" title="dyld"></a>dyld</h4><p><img src="/media/16481778312357.jpg"></p>
+<h4 id="main"><a href="#main" class="headerlink" title="main"></a>main</h4><figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> main(<span class="type">int</span> argc, <span class="type">char</span> *argv[],<span class="type">char</span> **envp, <span class="type">char</span> **apple) &#123;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="ASLR"><a href="#ASLR" class="headerlink" title="ASLR"></a>ASLR</h4><p>进程开始于他们自己的虚拟地址。按照传统方式，进程每次启动都在以相同的方式进行。这意味着，无论如何，在指定的架构上，一个程序的初始化进程的初始化虚拟镜像几乎都是相同的。这个问题在于，在进程生命周期内，所有的都是以同一方式执行，导致了程序在内存地址中是非常容易可预见的。<br>尽管这个给调试带来了优势，但是他更给黑客提供了更大的便利。主要的批评声是黑客使用<code>代码替换</code>:通过重写内存中的函数指针，就可以将程序的执行路径转到自己的代码，将程序的输入转变为自己的输入，通常情况。重写内存最常用的方法是采用缓冲区溢出（即利用未经保护的内存复制技术越过栈上的数组边界），然后函数返回自己重写的指针。黑客有更加创造性的技术，包括破坏<code>printf()</code>格式化字符串和堆的缓冲区溢出。跟多的是，任何用户指针甚至结构体化的异常句柄都可以导致代码注入</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">__TEXT: This is the program code. As in all operating systems, text segments are marked as r-x, meaning read-only and executable. This not only helps protect the binary from modifi- cation in memory, but optimizes memory usage by making the section shareable. This way, multiple instances of the same program use up only one __TEXT copy. The text segment usu- ally contains several sections, with the actual code in _text. It can also contain other read- only data, such as constants and hard-coded strings.</span><br><span class="line">__LINKEDIT: For use by dyld, this section contains tables of strings, symbols, and other data. __IMPORT: Used for the import tables on i386 binaries.</span><br><span class="line">__DATA: Used for readable/writable data.</span><br><span class="line">__MALLOC_TINY: For allocations of less than page size.</span><br><span class="line">__MALLOC_SMALL: For allocations of several pages. __MALLOC_LARGE: For allocations of over 1 MB.</span><br></pre></td></tr></table></figure>
+
+<h4 id="vmmap-可以查看进程布局"><a href="#vmmap-可以查看进程布局" class="headerlink" title="vmmap 可以查看进程布局"></a>vmmap 可以查看进程布局</h4><p>alloca() 占内存创建<br>alloc() 堆内存创建</p>
+<ol>
+<li>栈内存创建好处：<ol>
+<li>栈内存的页面已经在内存中，不会出现pagefault错误，影响性能</li>
+<li>函数调用后自动回收，堆需要自动free</li>
+</ol>
+</li>
+<li>审核短小的函数中对小空间的分配，不适合深嵌套逻辑的代码录路径。否则会栈溢出</li>
+</ol>
+<h4 id="虚拟内存"><a href="#虚拟内存" class="headerlink" title="虚拟内存"></a>虚拟内存</h4><h5 id="1-页面生命周期"><a href="#1-页面生命周期" class="headerlink" title="1.页面生命周期"></a>1.页面生命周期</h5><p><img src="/media/16492999750347.jpg"></p>
+<h5 id="2-vm-start"><a href="#2-vm-start" class="headerlink" title="2. vm_start"></a>2. vm_start</h5><h4 id="线程"><a href="#线程" class="headerlink" title="线程"></a>线程</h4><p>man -k pthread</p>
+<p>GCD:<br>优点: 减少死锁， 可以根据逻辑处理器的个数，而扩展</p>
+<h1 id="第5章-进程追踪和调试"><a href="#第5章-进程追踪和调试" class="headerlink" title="第5章 进程追踪和调试"></a>第5章 进程追踪和调试</h1><h3 id="获取进程信息"><a href="#获取进程信息" class="headerlink" title="获取进程信息"></a>获取进程信息</h3><ol>
+<li><code>sysctl  #include &lt;sys/sysctl.h&gt;</code></li>
+<li><code>proc_info (被系统隐藏)</code></li>
+</ol>
+<h3 id="崩溃信息"><a href="#崩溃信息" class="headerlink" title="崩溃信息"></a>崩溃信息</h3><p>SIGBUS   进程收到总线的错误信号， 错误的，读写操作， 读写未授权的地址</p>
+<h1 id="第8章-内核架构"><a href="#第8章-内核架构" class="headerlink" title="第8章 内核架构"></a>第8章 内核架构</h1><h3 id="三种不同风格的内核"><a href="#三种不同风格的内核" class="headerlink" title="三种不同风格的内核"></a>三种不同风格的内核</h3><h5 id="1-巨内核（monolithic-也称宏内核）"><a href="#1-巨内核（monolithic-也称宏内核）" class="headerlink" title="1. 巨内核（monolithic, 也称宏内核）"></a>1. 巨内核（monolithic, 也称宏内核）</h5><p>无论是基础功能还是高级功能呢，全部都放在一个地址空间中。这种架构的内核中，线程调度，内存管理，以及文件系统、安全管理、设备驱动全都在一起<br><img src="/media/16493899083301.jpg"></p>
+<h5 id="2-微内核"><a href="#2-微内核" class="headerlink" title="2.微内核"></a>2.微内核</h5><p><code>XNU</code>的核心<code>mach</code>组件就是<strong>微内核</strong><br>只包含最核心的功能，通常包括任务调度和内存管理，其他的功能都交给外部服务程序(通常是用户态)完成。<br>优点：</p>
+<ol>
+<li>正确性 （由于代码精简，内核错误几乎没有。）</li>
+<li>灵活性 （好的移植性）<br>缺点：</li>
+<li>性能 （消息传递在底层通过内存复制操作，以及数次上下文操作来实现。）<br><img src="/media/16496435460839.jpg"></li>
+</ol>
+<h5 id="3-混合内核"><a href="#3-混合内核" class="headerlink" title="3.混合内核"></a>3.混合内核</h5><p>大核包小核心<br>XNU 就是混合内核。 Mach为微内核。 简历在Mach之上的BSD层为巨内核<br>Mach 底层为消息机制，但由于大部分服务几乎在同一地址空间中（巨内核特性），所以消息操作都都为指针操作。不会造成过多的内存复制开销</p>
+<h3 id="用户态和内核态"><a href="#用户态和内核态" class="headerlink" title="用户态和内核态"></a>用户态和内核态</h3><h4 id="Inter架构-ring"><a href="#Inter架构-ring" class="headerlink" title="Inter架构  ring"></a>Inter架构  ring</h4><p>提供了 ring值为0-3   0为内核态  3为用户态   0-2操作系统服务级别调用。 但目前也没用<br>ring可以从小切到大。  代表从内核态-&gt;用户态。权限会逐渐减少。    <strong>ring不可从大切到小</strong></p>
+<h4 id="ARM架构-CPSR"><a href="#ARM架构-CPSR" class="headerlink" title="ARM架构 - CPSR"></a>ARM架构 - CPSR</h4><p>ARM处理器使用了一个特殊的寄存器–当前程序状态寄存器（current porogram status register）<br><img src="/media/16496485360103.jpg"></p>
+<h4 id="内核态-用户态转换机制"><a href="#内核态-用户态转换机制" class="headerlink" title="内核态&#x2F;用户态转换机制"></a>内核态&#x2F;用户态转换机制</h4><ol>
+<li>自愿转换：当程序要求方位内核服务的时候，应用程序可以进行一个调用进入内核态。通过一个预定义的硬件指令可以开始进入内核态的切换，这些内核服务称为<code>系统调用</code></li>
+<li>非自愿转换： 当程序发生异常。中断、或处理器陷阱的时候，代码的执行会被挂起，并且保留发生时的完整状态。控制权转交给预定义的内核态错误处理程序或终端服务程序（interrupt service routine, ISR）<br>控制权的另一种区分方式：</li>
+<li>同步: 控制权转移和程序流程保持同步</li>
+<li>异步: 发生在程序被外部源（中断控制器）中断的时候。 如果没有中断发生，程序应该可以正常的继续执行。因为出现了中断。所以必须处理中断</li>
+</ol>
+<h4 id="Intel上的陷阱处理程序"><a href="#Intel上的陷阱处理程序" class="headerlink" title="Intel上的陷阱处理程序"></a>Intel上的陷阱处理程序</h4><p><img src="/media/16497303287049.jpg"><br>表中包含3中异常类型：</p>
+<ol>
+<li>错误（fault） 可以纠正的移仓，并且处理器可以重新启动这条异常的指令</li>
+<li>陷阱（trap） 类似于错误，但错误处理完成后返回陷阱指令之后的那条指令</li>
+<li>终止 (abort) 不可重启指令。在表8-2中 “双重错误”就是一个终止，也就是说如果一条指令发生两次错误，就没有重试的必要了</li>
+</ol>
+<h4 id="ARM中线程处理程序"><a href="#ARM中线程处理程序" class="headerlink" title="ARM中线程处理程序"></a>ARM中线程处理程序</h4><p>ARM中比Intel简单， 从ARM的角度来说，任何非用户态都是通过一个异常，或者一个中断进入的。因此系统调用是利用SVC(SuperVisor Call)指令通过模拟中断完成的,过去称为SWI（SoftWare Interrupt）软件中断。 当这条指令执行的时候，CPU自动将控制权转给机器的陷阱向量，在陷阱向量中有个预定义的内核指令正在等待，通常是分支跳转到某个具体处理程序的指令<br><img src="/media/16497355830436.jpg"></p>
+<h4 id="自愿的内核转换"><a href="#自愿的内核转换" class="headerlink" title="自愿的内核转换"></a>自愿的内核转换</h4><ol>
+<li><p>模拟中断（ARM &amp; 早期Intel）<br>表8-2中的所有异常都是通过INT(InTerrupt)指令触发，在INT指令的参数传入异常的编号即可。这样触发异常的时候也称为<code>异步中断</code>，以区分不可预测的同步中断<br>表中 编号3的 为调试器断点。在Intel平台上系统调用好保存在EAX&#x2F;RAX寄存器上。ARM平台上保存在R12寄存器中</p>
+</li>
+<li><p>SYSENTER&#x2F;SYSCALL<br>Inter架构从Pentium II引入SYSENTER，在64位系统为SYSCALL。 这些指令使用型号特有的寄存器(model specific register) MSR。因此中断更快，进入内核态的时候，这些指令不用保存关键寄存器。回到用户态的时候也不需要恢复这些寄存器。因为通过使用MSR.CPU在切换内核态的时候可以使用一组特殊的寄存器，回到用户态的时候再使用普通寄存器。 SYSENTER和SYSCALL功能类似于CALL指令功能， 这些指令不需要在栈上保存地址。因为不会修改普通寄存器的IP<br><img src="/media/16497347520925.jpg"></p>
+</li>
+<li><p>ARM上的自愿内核转换<br>ARM架构没有专门的系统操作指令，热然使用系统调用门，内核加载的时候回覆盖所有的陷阱处理程序（表8-4）,其中包括软件中断处理程序，当用户态执行SVC指令的时候，控制权立即转交给处理程序_fleh_swi，CPU进入内核模式</p>
+</li>
+</ol>
+<h3 id="系统调用的处理"><a href="#系统调用的处理" class="headerlink" title="系统调用的处理"></a>系统调用的处理</h3><p><img src="/media/16498178652114.jpg"><br>32位平台UNIX系统调用编号为正数，mach陷阱的编号是负数<br>64位平台 所有的调用都是正数，但是最高位的字节包含了表8-6中的SYSCALL_CLASSS值。这个类别值是通过类型编号左移SYSCALL_CLASS_SHIFT（&#x3D;24）位(在64位平台上，系统调用好的高32位是不用的，所以系统调用号右移24位就可以得到系统调用的类别值)</p>
+<h1 id="第10章-Mach原语：一切以消息为媒介"><a href="#第10章-Mach原语：一切以消息为媒介" class="headerlink" title="第10章 Mach原语：一切以消息为媒介"></a>第10章 Mach原语：一切以消息为媒介</h1><p><img src="/media/16508518978704.jpg"></p>
+<p>mach_msg_trap</p>
+<h1 id="11章-mach调度"><a href="#11章-mach调度" class="headerlink" title="11章 mach调度"></a>11章 mach调度</h1><p><img src="/media/16508581242342.jpg"></p>
+<p><img src="/media/16508581342931.jpg"></p>
+<p><img src="/media/16508581633859.jpg"></p>
+<p><img src="/media/16508582863471.jpg"></p>
+<p><img src="/media/16508582993879.jpg"></p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E8%AF%BB%E4%B9%A6%E7%AC%94%E8%AE%B0/" rel="tag"># 读书笔记</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/02/25/%E7%AC%AC10%E7%AB%A0%20CALL%E5%92%8CRET%E6%8C%87%E4%BB%A4/" rel="prev" title="第10章 CALL和RET指令.md">
+      <i class="fa fa-chevron-left"></i> 第10章 CALL和RET指令.md
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+    <div class="comments" id="gitalk-container"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AC%AC%E5%9B%9B%E7%AB%A0%EF%BC%9A%E5%BA%96%E4%B8%81%E8%A7%A3%E8%BF%9B%E7%A8%8B%EF%BC%9Amach-o%E6%A0%BC%E5%BC%8F%E3%80%81%E8%BF%9B%E7%A8%8B%E4%BB%A5%E5%8F%8A%E7%BA%BF%E7%A8%8B%E5%86%85%E5%B9%95"><span class="nav-number">1.</span> <span class="nav-text">第四章：庖丁解进程：mach-o格式、进程以及线程内幕</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#otool"><span class="nav-number">1.0.0.0.1.</span> <span class="nav-text">otool</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#nm"><span class="nav-number">1.0.0.0.2.</span> <span class="nav-text">nm</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#xcrun-dyldinfo"><span class="nav-number">1.0.0.1.</span> <span class="nav-text">xcrun dyldinfo</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#dyld"><span class="nav-number">1.0.0.2.</span> <span class="nav-text">dyld</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#main"><span class="nav-number">1.0.0.3.</span> <span class="nav-text">main</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#ASLR"><span class="nav-number">1.0.0.4.</span> <span class="nav-text">ASLR</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#vmmap-%E5%8F%AF%E4%BB%A5%E6%9F%A5%E7%9C%8B%E8%BF%9B%E7%A8%8B%E5%B8%83%E5%B1%80"><span class="nav-number">1.0.0.5.</span> <span class="nav-text">vmmap 可以查看进程布局</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98"><span class="nav-number">1.0.0.6.</span> <span class="nav-text">虚拟内存</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-%E9%A1%B5%E9%9D%A2%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F"><span class="nav-number">1.0.0.6.1.</span> <span class="nav-text">1.页面生命周期</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-vm-start"><span class="nav-number">1.0.0.6.2.</span> <span class="nav-text">2. vm_start</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%BA%BF%E7%A8%8B"><span class="nav-number">1.0.0.7.</span> <span class="nav-text">线程</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AC%AC5%E7%AB%A0-%E8%BF%9B%E7%A8%8B%E8%BF%BD%E8%B8%AA%E5%92%8C%E8%B0%83%E8%AF%95"><span class="nav-number">2.</span> <span class="nav-text">第5章 进程追踪和调试</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%8E%B7%E5%8F%96%E8%BF%9B%E7%A8%8B%E4%BF%A1%E6%81%AF"><span class="nav-number">2.0.1.</span> <span class="nav-text">获取进程信息</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B4%A9%E6%BA%83%E4%BF%A1%E6%81%AF"><span class="nav-number">2.0.2.</span> <span class="nav-text">崩溃信息</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AC%AC8%E7%AB%A0-%E5%86%85%E6%A0%B8%E6%9E%B6%E6%9E%84"><span class="nav-number">3.</span> <span class="nav-text">第8章 内核架构</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E7%A7%8D%E4%B8%8D%E5%90%8C%E9%A3%8E%E6%A0%BC%E7%9A%84%E5%86%85%E6%A0%B8"><span class="nav-number">3.0.1.</span> <span class="nav-text">三种不同风格的内核</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#1-%E5%B7%A8%E5%86%85%E6%A0%B8%EF%BC%88monolithic-%E4%B9%9F%E7%A7%B0%E5%AE%8F%E5%86%85%E6%A0%B8%EF%BC%89"><span class="nav-number">3.0.1.0.1.</span> <span class="nav-text">1. 巨内核（monolithic, 也称宏内核）</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#2-%E5%BE%AE%E5%86%85%E6%A0%B8"><span class="nav-number">3.0.1.0.2.</span> <span class="nav-text">2.微内核</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#3-%E6%B7%B7%E5%90%88%E5%86%85%E6%A0%B8"><span class="nav-number">3.0.1.0.3.</span> <span class="nav-text">3.混合内核</span></a></li></ol></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%94%A8%E6%88%B7%E6%80%81%E5%92%8C%E5%86%85%E6%A0%B8%E6%80%81"><span class="nav-number">3.0.2.</span> <span class="nav-text">用户态和内核态</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Inter%E6%9E%B6%E6%9E%84-ring"><span class="nav-number">3.0.2.1.</span> <span class="nav-text">Inter架构  ring</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#ARM%E6%9E%B6%E6%9E%84-CPSR"><span class="nav-number">3.0.2.2.</span> <span class="nav-text">ARM架构 - CPSR</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%86%85%E6%A0%B8%E6%80%81-%E7%94%A8%E6%88%B7%E6%80%81%E8%BD%AC%E6%8D%A2%E6%9C%BA%E5%88%B6"><span class="nav-number">3.0.2.3.</span> <span class="nav-text">内核态&#x2F;用户态转换机制</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Intel%E4%B8%8A%E7%9A%84%E9%99%B7%E9%98%B1%E5%A4%84%E7%90%86%E7%A8%8B%E5%BA%8F"><span class="nav-number">3.0.2.4.</span> <span class="nav-text">Intel上的陷阱处理程序</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#ARM%E4%B8%AD%E7%BA%BF%E7%A8%8B%E5%A4%84%E7%90%86%E7%A8%8B%E5%BA%8F"><span class="nav-number">3.0.2.5.</span> <span class="nav-text">ARM中线程处理程序</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%87%AA%E6%84%BF%E7%9A%84%E5%86%85%E6%A0%B8%E8%BD%AC%E6%8D%A2"><span class="nav-number">3.0.2.6.</span> <span class="nav-text">自愿的内核转换</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8%E7%9A%84%E5%A4%84%E7%90%86"><span class="nav-number">3.0.3.</span> <span class="nav-text">系统调用的处理</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AC%AC10%E7%AB%A0-Mach%E5%8E%9F%E8%AF%AD%EF%BC%9A%E4%B8%80%E5%88%87%E4%BB%A5%E6%B6%88%E6%81%AF%E4%B8%BA%E5%AA%92%E4%BB%8B"><span class="nav-number">4.</span> <span class="nav-text">第10章 Mach原语：一切以消息为媒介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#11%E7%AB%A0-mach%E8%B0%83%E5%BA%A6"><span class="nav-number">5.</span> <span class="nav-text">11章 mach调度</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">沙睿</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">12</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">沙睿</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://mist.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Mist</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.css">
+
+<script>
+NexT.utils.loadComments(document.querySelector('#gitalk-container'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.js', () => {
+    var gitalk = new Gitalk({
+      clientID    : '5e02fda8fd31c994f16a',
+      clientSecret: '46b5db7b35b63613c731cd4e789b969287caee31',
+      repo        : 'rui4u.github.io',
+      owner       : 'Rui4u',
+      admin       : ['Rui4u'],
+      id          : '551bdf5b58266e3f9d1d2c7e0efc1c53',
+        language: '',
+      distractionFreeMode: true
+    });
+    gitalk.render('gitalk-container');
+  }, window.Gitalk);
+});
+</script>
+
+</body>
+</html>
