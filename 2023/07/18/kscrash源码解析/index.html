@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 6.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":{"gitalk":null}},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="KSCrash 源码分析流程 暂停除当前线程的所有线程 kscm_notifyFatalExceptionCaptured(false) &#x2F;&#x2F; 没懂 获取崩溃线程信息 初始化 运行机器环境信息 struct KSMachineContext 初始化线程回溯   获取多线程信息，获取当前线程回溯。 获取crashContext(静态变量) 设置crashContext 崩溃类型、">
+<meta property="og:type" content="article">
+<meta property="og:title" content="kscrash源码解析">
+<meta property="og:url" content="http://example.com/2023/07/18/kscrash%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/index.html">
+<meta property="og:site_name" content="沙睿的小站">
+<meta property="og:description" content="KSCrash 源码分析流程 暂停除当前线程的所有线程 kscm_notifyFatalExceptionCaptured(false) &#x2F;&#x2F; 没懂 获取崩溃线程信息 初始化 运行机器环境信息 struct KSMachineContext 初始化线程回溯   获取多线程信息，获取当前线程回溯。 获取crashContext(静态变量) 设置crashContext 崩溃类型、">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://example.com/media/16494018561075.jpg">
+<meta property="article:published_time" content="2023-07-18T05:23:15.000Z">
+<meta property="article:modified_time" content="2023-08-17T09:08:30.257Z">
+<meta property="article:author" content="沙睿">
+<meta property="article:tag" content="KSCrash">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/media/16494018561075.jpg">
+
+<link rel="canonical" href="http://example.com/2023/07/18/kscrash%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>kscrash源码解析 | 沙睿的小站</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">沙睿的小站</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container"></div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div class="algolia-results">
+  <div id="algolia-stats"></div>
+  <div id="algolia-hits"></div>
+  <div id="algolia-pagination" class="algolia-pagination"></div>
+</div>
+
+      
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+  <div class="reading-progress-bar"></div>
+
+  <a href="https://github.com/Rui4u" class="github-corner" title="Follow me on GitHub" aria-label="Follow me on GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/07/18/kscrash%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.png">
+      <meta itemprop="name" content="沙睿">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="沙睿的小站">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          kscrash源码解析
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2023-07-18 13:23:15" itemprop="dateCreated datePublished" datetime="2023-07-18T13:23:15+08:00">2023-07-18</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" itemprop="url" rel="index"><span itemprop="name">源码分析</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="KSCrash-源码分析"><a href="#KSCrash-源码分析" class="headerlink" title="KSCrash 源码分析"></a>KSCrash 源码分析</h1><h2 id="流程"><a href="#流程" class="headerlink" title="流程"></a>流程</h2><ol>
+<li>暂停除当前线程的所有线程</li>
+<li>kscm_notifyFatalExceptionCaptured(false) &#x2F;&#x2F; 没懂</li>
+<li>获取崩溃线程信息</li>
+<li>初始化<ol>
+<li>运行机器环境信息 <code>struct KSMachineContext</code></li>
+<li>初始化线程回溯</li>
+</ol>
+</li>
+<li>获取多线程信息，获取当前线程回溯。</li>
+<li>获取crashContext(静态变量)</li>
+<li>设置<code>crashContext</code> 崩溃类型、 eventID, machineContext(机器环境信息)</li>
+<li>执行kscm_handleException()<ol>
+<li>遍历Monitor设置信息</li>
+<li>g_onExceptionEvent() &#x2F;&#x2F; 执行onCrash  KCrashC.h中</li>
+</ol>
+</li>
+<li>书写report</li>
+</ol>
+<h2 id="一、监控"><a href="#一、监控" class="headerlink" title="一、监控"></a>一、监控</h2><h3 id="C-异常"><a href="#C-异常" class="headerlink" title="C++异常"></a>C++异常</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">由于`std::set_terminate`是在C++的动态库中，所以可以FishHook三方库hook。</span><br></pre></td></tr></table></figure>
+
+<h4 id="源码"><a href="#源码" class="headerlink" title="源码"></a>源码</h4><p><code>KSCrashMonitor_CPPException.cpp</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"></span><br><span class="line">g_originalTerminateHandler = std::<span class="built_in">set_terminate</span>(CPPExceptionTerminate); <span class="comment">// 添加异常回调</span></span><br><span class="line"><span class="function"><span class="type">static</span> <span class="type">void</span> <span class="title">CPPExceptionTerminate</span><span class="params">(<span class="type">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 获取崩溃类型</span></span><br><span class="line">    std::type_info* tinfo = __cxxabiv1::__cxa_current_exception_type();</span><br><span class="line">    name = tinfo-&gt;<span class="built_in">name</span>();</span><br><span class="line">    ...</span><br><span class="line">    处理回调 </span><br><span class="line">    KSCrash_MonitorContext* crashContext;</span><br><span class="line">    ...</span><br><span class="line">    <span class="built_in">kscm_handleException</span>(crashContext);</span><br><span class="line">    填充并上报</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="死锁"><a href="#死锁" class="headerlink" title="死锁"></a>死锁</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">主要是通过子线程循环往复的判断一个标志位是否在主线程中被修改过。来达到监听的效果。</span><br><span class="line">BeeHive 中也有类似的的实现。</span><br></pre></td></tr></table></figure>
+
+<p><img src="/media/16494018561075.jpg" alt="600"></p>
+<h4 id="源码-1"><a href="#源码-1" class="headerlink" title="源码"></a>源码</h4><p> <code>KSCrashMonitor_Deadlock.m</code></p>
+<figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line">- (<span class="type">id</span>) init</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span>((<span class="keyword">self</span> = [<span class="variable language_">super</span> init]))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// target (self) is retained until selector (runMonitor) exits.</span></span><br><span class="line">        <span class="comment">// 创建一个线程执行runmonitor;</span></span><br><span class="line">        <span class="keyword">self</span>.monitorThread = [[<span class="built_in">NSThread</span> alloc] initWithTarget:<span class="keyword">self</span> selector:<span class="keyword">@selector</span>(runMonitor) object:<span class="literal">nil</span>];</span><br><span class="line">        <span class="keyword">self</span>.monitorThread.name = <span class="string">@&quot;KSCrash Deadlock Detection Thread&quot;</span>;</span><br><span class="line">        [<span class="keyword">self</span>.monitorThread start];</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">self</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">- (<span class="type">void</span>) runMonitor</span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">BOOL</span> cancelled = <span class="literal">NO</span>;</span><br><span class="line">    <span class="keyword">do</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// Only do a watchdog check if the watchdog interval is &gt; 0.</span></span><br><span class="line">        <span class="comment">// If the interval is &lt;= 0, just idle until the user changes it.</span></span><br><span class="line">        <span class="keyword">@autoreleasepool</span> &#123;</span><br><span class="line">            <span class="built_in">NSTimeInterval</span> sleepInterval = g_watchdogInterval;</span><br><span class="line">            <span class="type">BOOL</span> runWatchdogCheck = sleepInterval &gt; <span class="number">0</span>;</span><br><span class="line">            <span class="keyword">if</span>(!runWatchdogCheck)</span><br><span class="line">            &#123;</span><br><span class="line">                sleepInterval = kIdleInterval;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">// 睡眠</span></span><br><span class="line">            [<span class="built_in">NSThread</span> sleepForTimeInterval:sleepInterval];</span><br><span class="line">            <span class="comment">// 线程是否没有被取消</span></span><br><span class="line">            cancelled = <span class="keyword">self</span>.monitorThread.isCancelled;</span><br><span class="line">            <span class="comment">// 没有被取消并且开启了`看门狗`检查</span></span><br><span class="line">            <span class="keyword">if</span>(!cancelled &amp;&amp; runWatchdogCheck)</span><br><span class="line">            &#123;</span><br><span class="line">                <span class="keyword">if</span>(<span class="keyword">self</span>.awaitingResponse)  <span class="comment">// 如果等待响应</span></span><br><span class="line">                &#123;</span><br><span class="line">                    <span class="comment">//崩溃报错</span></span><br><span class="line">                    [<span class="keyword">self</span> handleDeadlock];</span><br><span class="line">                &#125;</span><br><span class="line">                <span class="keyword">else</span></span><br><span class="line">                &#123;</span><br><span class="line">                    [<span class="keyword">self</span> watchdogPulse];    <span class="comment">//非等待响应时，进行操作。设置是否正在等待响应</span></span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125; <span class="keyword">while</span> (!cancelled);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">- (<span class="type">void</span>) watchdogPulse</span><br><span class="line">&#123;</span><br><span class="line">    __block <span class="type">id</span> blockSelf = <span class="keyword">self</span>;</span><br><span class="line">    <span class="comment">// 设置正在响应</span></span><br><span class="line">    <span class="keyword">self</span>.awaitingResponse = <span class="literal">YES</span>; </span><br><span class="line">    <span class="comment">// 异步主线程调用 取消正在响应状态， 如果超过8秒没有调用 `watchdogAnswer` 说明主线程一直繁忙。一个runloop周期超过8秒。 当超过8秒后，上面睡眠的线程激活，并self.awaitingResponse 为true， 会调用 `handleDeadlock` 上报;</span></span><br><span class="line">    <span class="built_in">dispatch_async</span>(dispatch_get_main_queue(), ^</span><br><span class="line">                   &#123;</span><br><span class="line">                       [blockSelf watchdogAnswer];</span><br><span class="line">                   &#125;);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">- (<span class="type">void</span>) watchdogAnswer</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">self</span>.awaitingResponse = <span class="literal">NO</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+<h3 id="Mach-mvk"><a href="#Mach-mvk" class="headerlink" title="Mach [mʌk]"></a>Mach [mʌk]</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Mach： 是一种操作系统微内核，是许多新操作系统的设计基础。  </span><br><span class="line">Tasks  Threads Ports Messages 四个重要概念      </span><br><span class="line">参考链接：  </span><br><span class="line">[[../../D4_计算机原理/01_Mach相关知识#Mach基础知识|01_Mach基础知识]]</span><br></pre></td></tr></table></figure>
+
+<h4 id="步骤"><a href="#步骤" class="headerlink" title="步骤"></a>步骤</h4><p><strong>创建了两个线程</strong></p>
+<ol>
+<li><p>主异常处理线程</p>
+</li>
+<li><p>次要异常处理线程。（先暂停，主异常处理异常后，再回复次要异常处理线程）<br>为啥创建俩，防止主要异常处理线程崩溃。</p>
+</li>
+<li><p>通过 mach_task_self() 获取当前进程对应的 task。</p>
+</li>
+<li><p>通过 task_get_exception_ports() 获取原本处理异常的 port，并保存在 g_previousExceptionPorts 中。</p>
+</li>
+<li><p>通过 mach_port_allocate() 创建新的异常处理端口。</p>
+</li>
+<li><p>通过 mach_port_insert_right() 给这个新创建的端口申请权限</p>
+</li>
+<li><p>通过 task_set_exception_ports() 把异常接收的 port 设置为自己新创建的 port</p>
+</li>
+<li><p>创建好 port 之后，就可以创建自己的线程去一直读取 port 上的消息了。通过 pthread_create() 创建自己的线程，以及设置好执行的方法为 handleExceptions。</p>
+</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">获取线程的时候，把线程状态设成`分离的`状态(detached)。 `detached`的状态,不会被系统回收。  </span><br><span class="line">参考链接：  </span><br><span class="line">[[../../D4_计算机原理/01_Mach相关知识#线程的状态|线程相关状态]]</span><br></pre></td></tr></table></figure>
+
+<h4 id="源码-2"><a href="#源码-2" class="headerlink" title="源码"></a>源码</h4><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line">    </span><br><span class="line"><span class="comment">/// 获取之前的异常 </span></span><br><span class="line"><span class="function"><span class="type">kern_return_t</span> <span class="title">task_get_exception_ports</span></span></span><br><span class="line"><span class="function"><span class="params">(</span></span></span><br><span class="line"><span class="params"><span class="function">	<span class="type">task_t</span> task,</span></span></span><br><span class="line"><span class="params"><span class="function">	<span class="type">exception_mask_t</span> exception_mask,</span></span></span><br><span class="line"><span class="params"><span class="function">	<span class="type">exception_mask_array_t</span> masks,</span></span></span><br><span class="line"><span class="params"><span class="function">	<span class="type">mach_msg_type_number_t</span> *masksCnt,</span></span></span><br><span class="line"><span class="params"><span class="function">	<span class="type">exception_handler_array_t</span> old_handlers,</span></span></span><br><span class="line"><span class="params"><span class="function">	<span class="type">exception_behavior_array_t</span> old_behaviors,</span></span></span><br><span class="line"><span class="params"><span class="function">	<span class="type">exception_flavor_array_t</span> old_flavors</span></span></span><br><span class="line"><span class="params"><span class="function">)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 端口信息</span></span><br><span class="line"><span class="type">static</span> <span class="type">mach_port_t</span> g_exceptionPort = MACH_PORT_NULL;</span><br><span class="line"></span><br><span class="line"><span class="comment">/// 创建接收的端口</span></span><br><span class="line"><span class="built_in">mach_port_allocate</span>(thisTask, MACH_PORT_RIGHT_RECEIVE, &amp;g_exceptionPort);</span><br><span class="line"></span><br><span class="line"><span class="comment">///  添加发送权限到端口</span></span><br><span class="line">kr = <span class="built_in">mach_port_insert_right</span>(thisTask,g_exceptionPort,g_exceptionPort, MACH_MSG_TYPE_MAKE_SEND);</span><br><span class="line"></span><br><span class="line"><span class="comment">/// 设置端口可以发送异常数据 处理异常程序</span></span><br><span class="line">kr = <span class="built_in">task_set_exception_ports</span></span><br><span class="line">(thisTask,</span><br><span class="line">mask,</span><br><span class="line">g_exceptionPort,</span><br><span class="line">(<span class="type">int</span>)(EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES),</span><br><span class="line">THREAD_STATE_NONE);</span><br><span class="line"></span><br><span class="line"><span class="comment">/// 创建可分离的线程</span></span><br><span class="line"><span class="comment">// 初始化ptheard</span></span><br><span class="line"><span class="built_in">pthread_attr_init</span>(&amp;attr);</span><br><span class="line"><span class="comment">// 设置线程分离状态  </span></span><br><span class="line"><span class="built_in">pthread_attr_setdetachstate</span>(&amp;attr, PTHREAD_CREATE_DETACHED);</span><br><span class="line"><span class="comment">// 创建线程</span></span><br><span class="line"><span class="built_in">pthread_create</span>(&amp;g_secondaryPThread,   <span class="comment">//线程</span></span><br><span class="line">                           &amp;attr,     <span class="comment">// 参数</span></span><br><span class="line">                           &amp;handleExceptions, <span class="comment">//回调</span></span><br><span class="line">                           (<span class="type">void</span>*)kThreadSecondary);  <span class="comment">//标识</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">获取当前线程ID的方式</span><br><span class="line">1. pthread_mach_thread_np(pthread_self())  // 可单独使用</span><br><span class="line">2. mach_thread_self();  //  会对线程引用计数+1，需要配合mach_port_deallocate() </span><br><span class="line">3. mach_task_self() // 配对vm_deallocate();使用 防止内存泄漏</span><br><span class="line">    </span><br><span class="line">[mach_thread_self()参考链接](http://www.gnu.org/software/hurd/gnumach-doc/Thread-Information.html)  </span><br><span class="line">[mach_port_deallocate()参考链接](http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/mach_port_deallocate.html)</span><br><span class="line"></span><br><span class="line">这里的 np 表示 not POSIX，也就是说它并不能跨平台使用</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<h3 id="NSException异常"><a href="#NSException异常" class="headerlink" title="NSException异常"></a>NSException异常</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">捕捉异常</span><br><span class="line">NSSetUncaughtExceptionHandler(&amp;handleUncaughtException);</span><br></pre></td></tr></table></figure>
+
+<h3 id="信号量Signal"><a href="#信号量Signal" class="headerlink" title="信号量Signal"></a>信号量Signal</h3><h4 id="分类"><a href="#分类" class="headerlink" title="分类"></a>分类</h4><ol>
+<li>SIGABRT (Abort):<ul>
+<li>用于表示程序调用了 <code>abort()</code> 函数，通常是在出现严重错误时强制终止程序。</li>
+<li>可能由应用程序自身或系统发起。</li>
+</ul>
+</li>
+<li>SIGBUS:<ul>
+<li>表示非法内存访问，如对非法地址进行读写操作。</li>
+<li>可能由硬件错误或编程错误引起。</li>
+</ul>
+</li>
+<li>SIGFPE (Floating-Point Exception):<ul>
+<li>表示浮点运算异常，如除以零或计算结果无穷大。</li>
+<li>通常与浮点数计算相关。</li>
+</ul>
+</li>
+<li>SIGILL (Illegal Instruction):<ul>
+<li>表示执行了非法或未定义的指令。</li>
+<li>可能由二进制文件损坏或使用错误的机器码引起。</li>
+</ul>
+</li>
+<li>SIGPIPE:<ul>
+<li>表示管道或套接字被关闭，但仍然进行写操作。</li>
+<li>通常发生在使用网络或进程间通信时。</li>
+</ul>
+</li>
+<li>SIGSEGV (Segmentation Violation):<ul>
+<li>表示非法内存访问，如空指针访问、已释放内存访问等。</li>
+<li>是一种常见的崩溃类型。</li>
+</ul>
+</li>
+<li>SIGSYS (Bad System Call):<ul>
+<li>表示执行了未定义的系统调用。</li>
+<li>通常与底层系统相关。</li>
+</ul>
+</li>
+<li>SIGTRAP (Trap):<ul>
+<li>表示触发了断点或调试陷阱。</li>
+<li>在调试过程中使用。</li>
+</ul>
+</li>
+</ol>
+<p>信号量捕捉的两种方式</p>
+<ol>
+<li><code>void(*signal(int, void (*)(int)))(int);</code></li>
+<li><code>int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);</code></li>
+</ol>
+<p>两者的区别：<br><code>int sigaction()</code>:</p>
+<ol>
+<li><code>int sigaction()</code>方式会传递信号处理方式的结构体，会传入一个已经开辟的空间，处理异常的操作空间先初始化，避免递归问题无法创建空间上传的问题</li>
+<li><code>action.sa_flags = SA_SIGINFO</code>; 可以获取崩溃信息， 例如崩溃地址，信号量名称，信号量code等。 返回回调类型为<code>siginfo_t</code>;</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">/** 信号绑定回调</span><br><span class="line">signum 参数指出要捕获的信号类型，</span><br><span class="line">act 参数指定新的信号处理方式，</span><br><span class="line">oldact 参数输出先前信号的处理方式（如果不为NULL的话）。</span><br><span class="line">*/</span><br><span class="line">int sigaction(int signum, const struct sigaction *act,</span><br><span class="line">                     struct sigaction *oldact);</span><br></pre></td></tr></table></figure>
+
+
+<h4 id="遇到的问题"><a href="#遇到的问题" class="headerlink" title="遇到的问题"></a>遇到的问题</h4><p>需要过滤掉SIGPIPE信号量， 否则每次断开长连接的时候都会上报；</p>
+<h4 id="问题"><a href="#问题" class="headerlink" title="问题"></a>问题</h4><p>为什么捕捉Mach异常还需要捕捉UNIX信号:</p>
+<p>在 macOS 和 iOS 等系统中，Mach 异常和 UNIX 信号是两种不同的异常处理机制，分别用于处理不同类型的异常。</p>
+<ol>
+<li>Mach 异常：<ul>
+<li>Mach 是 macOS 和 iOS 等系统的内核，它负责管理进程间通信和系统调用等底层操作。</li>
+<li>Mach 异常是由内核发出的，用于处理诸如内存访问错误、非法指令等底层异常。</li>
+<li>Mach 异常处理通过使用 Mach 线程异常处理器来捕捉和处理异常。可以使用 <code>task_set_exception_ports()</code> 函数设置 Mach 异常的处理回调函数。</li>
+</ul>
+</li>
+<li>UNIX 信号：<ul>
+<li>UNIX 信号是用于进程间通信和处理高层次事件的机制，例如用户按下 <code>Ctrl + C</code> 时产生的 <code>SIGINT</code> 信号。</li>
+<li>UNIX 信号可以用于捕捉和处理一些高级事件，如程序终止请求、键盘中断等。</li>
+<li>UNIX 信号处理通过使用 <code>signal()</code> 或 <code>sigaction()</code> 函数来设置信号处理器回调函数。</li>
+</ul>
+</li>
+</ol>
+<p>由于 Mach 异常处理机制是底层的异常处理机制，而 UNIX 信号是高层的进程间通信和事件处理机制，因此在实际应用中，捕捉 Mach 异常和 UNIX 信号可以用于处理不同类型的异常和事件。一些应用场景可能需要同时处理底层的 Mach 异常和高级的 UNIX 信号。</p>
+<p>例如，在一个应用程序中，可能需要捕捉 Mach 异常来处理底层的内存访问错误或非法指令，以确保程序在出现底层异常时可以正常退出或处理异常。同时，也可能需要捕捉 UNIX 信号来处理用户的交互操作，如终止应用程序或执行特定操作等。</p>
+<p>因此，捕捉 Mach 异常和 UNIX 信号是为了实现全面的异常处理和事件处理，使得应用程序能够在出现各种异常和事件时做出相应的处理和响应。同时，需要注意两种处理机制的使用方式和区别，以确保异常处理和事件处理的准确性和稳定性。</p>
+<p>首先要明确的一点是，Mach异常和UNIX信号都可以被捕获，他们也几乎一一对应，但我们需要优先处理Mach异常，因为Mach异常更接近底层，而UNIX信号存在被Mach默认异常处理函数直接退出进程而无法生成的情况。</p>
+<p>有一些异常如EXC_CRASH，在Mach异常的阶段没有捕捉，而是放到UNIX信号中捕捉，其中的解释在PLCrashReporter的注释中有详细的解释：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/* We still need to use signal handlers to catch SIGABRT in-process. The kernel sends an EXC_CRASH mach exception</span><br><span class="line">* to denote SIGABRT termination. In that case, catching the Mach exception in-process leads to process deadlock</span><br><span class="line">* in an uninterruptable wait. Thus, we fall back on BSD signal handlers for SIGABRT, and do not register for</span><br><span class="line">* EXC_CRASH. */</span><br></pre></td></tr></table></figure>
+
+
+<h3 id="UNIX信号"><a href="#UNIX信号" class="headerlink" title="UNIX信号"></a>UNIX信号</h3><p>Mach已经通过异常机制提供了底层的异常处理，但为了兼容更为流行的POSIX标准，BSD在Mach异常机制之上构建的UNIX信号处理机制。异常信号首先被转换为Mach异常，如果没有被外界捕捉，则会被默认的异常处理ux_exception()转换为UNIX信号。<br>例如<code>SIGSEGV</code>（非法内存访问）转换为 <code>EXC_BAD_ACCESS</code></p>
+<h3 id="僵尸对象检测"><a href="#僵尸对象检测" class="headerlink" title="僵尸对象检测"></a>僵尸对象检测</h3><p>通过hook 对象的dealloc,把每个销毁的对象的地址做缓存。这样以后出现野指针 crash 的时候，如果发现是 zombie 中指向的对象，那么就可以说明它被提前释放了。<br>因为 hash 获取 index 的方式总是会产生一定的碰撞导致对象被覆盖。当然不可否认这是一种经济有效的测试野指针的方式。作者自己都在注释中说明这是一种 Poor man’s Zombie tracking XD</p>
+<p>相关代码在<code>KSCrashMonitor_Zombie</code>中</p>
+<h2 id="二、系统状态"><a href="#二、系统状态" class="headerlink" title="二、系统状态"></a>二、系统状态</h2><h3 id="AppState"><a href="#AppState" class="headerlink" title="AppState"></a>AppState</h3><h3 id="系统信息"><a href="#系统信息" class="headerlink" title="系统信息"></a>系统信息</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">KSCrashMonitor_System.m</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h3 id="User上报"><a href="#User上报" class="headerlink" title="User上报"></a>User上报</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">KSCrashMonitor_User.c</span><br></pre></td></tr></table></figure>
+
+<h2 id="三、上报"><a href="#三、上报" class="headerlink" title="三、上报"></a>三、上报</h2><h3 id="流程-结构"><a href="#流程-结构" class="headerlink" title="流程 &amp; 结构"></a>流程 &amp; 结构</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 监控上下文</span></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">KSCrash_MonitorContext</span>;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 真机环境</span></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">KSMachineContext</span>;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 堆栈环境</span></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">KSStackCursor</span>;</span></span><br></pre></td></tr></table></figure>
+
+
+<h3 id="动态库地址获取-ASLR"><a href="#动态库地址获取-ASLR" class="headerlink" title="动态库地址获取(ASLR)"></a>动态库地址获取(ASLR)</h3><ol>
+<li><p>相关API:</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&lt;mach-o/loader.h&gt; 中的头部信息结构体</span><br><span class="line">_dyld_image_count()   <span class="comment">//获取image个数 </span></span><br><span class="line">_dyld_get_image_header(index)  <span class="comment">//获取image头部信息   index为第几个image</span></span><br><span class="line">_dyld_get_image_name(index) <span class="comment">// 获取image名称</span></span><br></pre></td></tr></table></figure>
+</li>
+<li><p>mach_头部信息 相关内容:</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">mach_header</span> &#123;</span></span><br><span class="line">	<span class="type">uint32_t</span>	magic;		<span class="comment">/* mach magic number identifier */</span></span><br><span class="line">	<span class="type">cpu_type_t</span>	cputype;	<span class="comment">/* cpu specifier */</span></span><br><span class="line">	<span class="type">cpu_subtype_t</span>	cpusubtype;	<span class="comment">/* machine specifier */</span></span><br><span class="line">	<span class="type">uint32_t</span>	filetype;	<span class="comment">/* type of file */</span></span><br><span class="line">	<span class="type">uint32_t</span>	ncmds;		<span class="comment">/* number of load commands */</span></span><br><span class="line">	<span class="type">uint32_t</span>	sizeofcmds;	<span class="comment">/* the size of all the load commands */</span></span><br><span class="line">	<span class="type">uint32_t</span>	flags;		<span class="comment">/* flags */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">load_command</span> &#123;</span></span><br><span class="line">	<span class="type">uint32_t</span> cmd;		<span class="comment">/* type of load command */</span></span><br><span class="line">	<span class="type">uint32_t</span> cmdsize;	<span class="comment">/* total size of command in bytes */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">segment_command_64</span> &#123;</span> <span class="comment">/* for 64-bit architectures */</span></span><br><span class="line">	<span class="type">uint32_t</span>	cmd;		<span class="comment">/* LC_SEGMENT_64 */</span></span><br><span class="line">	<span class="type">uint32_t</span>	cmdsize;	<span class="comment">/* includes sizeof section_64 structs */</span></span><br><span class="line">	<span class="type">char</span>		segname[<span class="number">16</span>];	<span class="comment">/* segment name */</span></span><br><span class="line">	<span class="type">uint64_t</span>	vmaddr;		<span class="comment">/* memory address of this segment */</span></span><br><span class="line">	<span class="type">uint64_t</span>	vmsize;		<span class="comment">/* memory size of this segment */</span></span><br><span class="line">	<span class="type">uint64_t</span>	fileoff;	<span class="comment">/* file offset of this segment */</span></span><br><span class="line">	<span class="type">uint64_t</span>	filesize;	<span class="comment">/* amount to map from the file */</span></span><br><span class="line">	<span class="type">vm_prot_t</span>	maxprot;	<span class="comment">/* maximum VM protection */</span></span><br><span class="line">	<span class="type">vm_prot_t</span>	initprot;	<span class="comment">/* initial VM protection */</span></span><br><span class="line">	<span class="type">uint32_t</span>	nsects;		<span class="comment">/* number of sections in segment */</span></span><br><span class="line">	<span class="type">uint32_t</span>	flags;		<span class="comment">/* flags */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>SCrash中的源码</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">void</span> <span class="title function_">writeBinaryImage</span><span class="params">(<span class="type">const</span> KSCrashReportWriter* <span class="type">const</span> writer,</span></span><br><span class="line"><span class="params">                             <span class="type">const</span> <span class="type">char</span>* <span class="type">const</span> key,</span></span><br><span class="line"><span class="params">                             <span class="type">const</span> <span class="type">int</span> index)</span>;</span><br><span class="line">                             </span><br><span class="line"><span class="type">bool</span> <span class="title function_">ksdl_getBinaryImageForHeader</span><span class="params">(<span class="type">const</span> <span class="type">void</span>* <span class="type">const</span> header_ptr, <span class="type">const</span> <span class="type">char</span>* <span class="type">const</span> image_name, KSBinaryImage* buffer)</span></span><br><span class="line"></span><br></pre></td></tr></table></figure></li>
+</ol>
+<h3 id="线程信息获取"><a href="#线程信息获取" class="headerlink" title="线程信息获取"></a>线程信息获取</h3><h4 id="多线程获取"><a href="#多线程获取" class="headerlink" title="多线程获取"></a>多线程获取</h4><p>获取进程<code>mach_thread_self()</code> </p>
+<p>相关API:</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;mach/mach.h&gt;</span></span></span><br><span class="line"><span class="comment">// 获取task</span></span><br><span class="line"><span class="type">const</span> <span class="type">task_t</span> thisTask = mach_task_self();</span><br><span class="line"><span class="comment">// 获取当前线程</span></span><br><span class="line"><span class="type">thread_t</span> thread_self = mach_thread_self();</span><br><span class="line"><span class="comment">// 线程和当前任务解除</span></span><br><span class="line">mach_port_deallocate(mach_task_self(), thread_self);</span><br><span class="line"><span class="comment">// 通过任务，获取线程于线程个数</span></span><br><span class="line"><span class="type">thread_act_array_t</span> threads = <span class="literal">NULL</span>;</span><br><span class="line"><span class="type">mach_msg_type_number_t</span> numThreads = <span class="number">0</span>;</span><br><span class="line"><span class="type">kern_return_t</span> kr = task_threads(thisTask, &amp;threads, &amp;numThreads);</span><br><span class="line">kr == KERN_SUCCESS 判断是否成功</span><br><span class="line"><span class="comment">// 暂停线程</span></span><br><span class="line">thread_suspend(thread)</span><br></pre></td></tr></table></figure>
+
+
+<p>相关API </p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">vm_deallocate()</span><br><span class="line"></span><br><span class="line">读取内存</span><br><span class="line">使用vm_read_overwrite()函数，从目标进程&quot;读取&quot;内存。注意，这个函数与vm_read()不同，应该并没有做实际的数据拷贝，而是将region.address ~ region.address + region.size范围对应的所有映射状态同步给了region_data ~ region_data + region.size，对于Resident的部分，两个进程中不同的虚拟内存地址对应的应该是相同的物理内存地址。</span><br><span class="line"></span><br><span class="line">原文链接：https://blog.csdn.net/liumazi/article/details/106417276</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>KSCrash中的源码</p>
+<h4 id="问题-1"><a href="#问题-1" class="headerlink" title="问题"></a>问题</h4><ol>
+<li>为什么要挂起线程：<br>在打印线程信息的时候，线程是动态变化的。在捕捉后挂起线程，是为了保证当前信息是当前时刻的状态。<br>挂起线程后需要注意死锁线程同步问题，可能造成的死锁问题。 同时结束后也需要恢复线程。</li>
+<li>线程挂起可能出现的问题：<ol>
+<li>线程安全问题</li>
+<li>阻塞其他操作</li>
+<li>死锁</li>
+</ol>
+</li>
+</ol>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="comment">// 暂停除当前线程外的所有线程</span></span><br><span class="line"><span class="type">void</span> <span class="title function_">ksmc_suspendEnvironment</span><span class="params">(__unused <span class="type">thread_act_array_t</span> *suspendedThreads, __unused <span class="type">mach_msg_type_number_t</span> *numSuspendedThreads)</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="meta">#<span class="keyword">if</span> KSCRASH_HAS_THREADS_API</span></span><br><span class="line">    KSLOG_DEBUG(<span class="string">&quot;Suspending environment.&quot;</span>);</span><br><span class="line">    <span class="type">kern_return_t</span> kr;</span><br><span class="line">    <span class="comment">// 获取当前task</span></span><br><span class="line">    <span class="type">const</span> <span class="type">task_t</span> thisTask = mach_task_self();</span><br><span class="line">    <span class="comment">// 获取当前线程</span></span><br><span class="line">    <span class="type">const</span> <span class="type">thread_t</span> thisThread = (<span class="type">thread_t</span>)ksthread_self();</span><br><span class="line">    <span class="comment">//获取全部线程以及个数</span></span><br><span class="line">    <span class="keyword">if</span>((kr = task_threads(thisTask, suspendedThreads, numSuspendedThreads)) != KERN_SUCCESS)</span><br><span class="line">    &#123;</span><br><span class="line">        KSLOG_ERROR(<span class="string">&quot;task_threads: %s&quot;</span>, mach_error_string(kr));</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//遍历所有线程</span></span><br><span class="line">    <span class="keyword">for</span>(<span class="type">mach_msg_type_number_t</span> i = <span class="number">0</span>; i &lt; *numSuspendedThreads; i++)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="type">thread_t</span> thread = (*suspendedThreads)[i];</span><br><span class="line">        <span class="comment">// 不是当前线程内&amp;不在全局list内</span></span><br><span class="line">        <span class="keyword">if</span>((thread != thisThread &amp;&amp; !isThreadInList(thread, g_reservedThreads, g_reservedThreadsCount)))</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="comment">// 暂停线程</span></span><br><span class="line">            <span class="keyword">if</span>((kr = thread_suspend(thread)) != KERN_SUCCESS)</span><br><span class="line">            &#123;</span><br><span class="line">                <span class="comment">// Record the error and keep going.</span></span><br><span class="line">                KSLOG_ERROR(<span class="string">&quot;thread_suspend (%08x): %s&quot;</span>, thread, mach_error_string(kr));</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    KSLOG_DEBUG(<span class="string">&quot;Suspend complete.&quot;</span>);</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">void</span> <span class="title function_">writeAllThreads</span><span class="params">(<span class="type">const</span> KSCrashReportWriter* <span class="type">const</span> writer,</span></span><br><span class="line"><span class="params">                            <span class="type">const</span> <span class="type">char</span>* <span class="type">const</span> key,</span></span><br><span class="line"><span class="params">                            <span class="type">const</span> KSCrash_MonitorContext* <span class="type">const</span> crash,</span></span><br><span class="line"><span class="params">                            <span class="type">bool</span> writeNotableAddresses)</span></span><br><span class="line">                            </span><br><span class="line">KSThread <span class="title function_">ksthread_self</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">thread_t</span> thread_self = mach_thread_self(); <span class="comment">//获取</span></span><br><span class="line">    mach_port_deallocate(mach_task_self(), thread_self); <span class="comment">//释放配对</span></span><br><span class="line">    <span class="keyword">return</span> (KSThread)thread_self;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<h4 id="多线程中的寄存器获取"><a href="#多线程中的寄存器获取" class="headerlink" title="多线程中的寄存器获取"></a>多线程中的寄存器获取</h4><p>machineContext</p>
+<p>相关API </p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">kscpu_i_fillState(thread, (thread_state_t)&amp;machineContext-&gt;__ss, ARM_THREAD_STATE64, ARM_THREAD_STATE64_COUNT);</span><br><span class="line">kscpu_i_fillState(thread, (thread_state_t)&amp;machineContext-&gt;__es, ARM_EXCEPTION_STATE64, ARM_EXCEPTION_STATE64_COUNT);</span><br><span class="line"></span><br><span class="line">kscpu_i_fillState();</span><br><span class="line">thread_get_state(); //获取寄存器信息</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h4 id="线程回溯"><a href="#线程回溯" class="headerlink" title="线程回溯"></a>线程回溯</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">KSStackCursor_MachineContext.c</span><br><span class="line">顺序：</span><br><span class="line">1. 获取r15(PC)寄存器 程序运行到哪 指向哪,找到当前执行代码</span><br><span class="line">2. 获取r14(LR)寄存器，函数返回时候的寄存器</span><br><span class="line">3. 获取r11(FP)寄存器  </span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h4 id="判断是否是栈溢出"><a href="#判断是否是栈溢出" class="headerlink" title="判断是否是栈溢出"></a>判断是否是栈溢出</h4><p>通过线程回溯，获取线程调用栈最大深度，如果超过最大深度则判断为栈溢出</p>
+<h1 id="获取系统多线程相关API与知识"><a href="#获取系统多线程相关API与知识" class="headerlink" title="获取系统多线程相关API与知识"></a>获取系统多线程相关API与知识</h1><p>相关API:</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;mach/mach.h&gt;</span> </span></span><br><span class="line"><span class="comment">// 获取task</span></span><br><span class="line"><span class="type">const</span> <span class="type">task_t</span> thisTask = mach_task_self();</span><br><span class="line"><span class="comment">// 获取当前线程</span></span><br><span class="line"><span class="type">thread_t</span> thread_self = mach_thread_self();</span><br><span class="line"><span class="comment">// 线程和当前任务解除</span></span><br><span class="line">mach_port_deallocate(mach_task_self(), thread_self);</span><br><span class="line"><span class="comment">// 通过任务，获取线程于线程个数</span></span><br><span class="line"><span class="type">thread_act_array_t</span> threads = <span class="literal">NULL</span>;</span><br><span class="line"><span class="type">mach_msg_type_number_t</span> numThreads = <span class="number">0</span>;</span><br><span class="line"><span class="type">kern_return_t</span> kr = task_threads(thisTask, &amp;threads, &amp;numThreads);</span><br><span class="line">kr == KERN_SUCCESS 判断是否成功</span><br><span class="line"><span class="comment">// 暂停线程</span></span><br><span class="line">thread_suspend(thread)</span><br><span class="line"></span><br><span class="line"><span class="comment">// 释放端口 配对mach_thread_self() 防止内存泄漏</span></span><br><span class="line">mach_port_deallocate(task, thread); 释放端口</span><br><span class="line"></span><br><span class="line"><span class="comment">/// 虚拟内存释放 配对mach_task_self;  防止内存泄漏</span></span><br><span class="line">vm_deallocate(task, threads, size); </span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/KSCrash/" rel="tag"># KSCrash</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/09/20/%E6%B7%B1%E5%85%A5%E8%A7%A3%E6%9E%90MacOS-iOS%E7%B3%BB%E7%BB%9F/" rel="prev" title="深入解析MacOS&iOS系统">
+      <i class="fa fa-chevron-left"></i> 深入解析MacOS&iOS系统
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+    <div class="comments" id="gitalk-container"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#KSCrash-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90"><span class="nav-number">1.</span> <span class="nav-text">KSCrash 源码分析</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B5%81%E7%A8%8B"><span class="nav-number">1.1.</span> <span class="nav-text">流程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E7%9B%91%E6%8E%A7"><span class="nav-number">1.2.</span> <span class="nav-text">一、监控</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#C-%E5%BC%82%E5%B8%B8"><span class="nav-number">1.2.1.</span> <span class="nav-text">C++异常</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E7%A0%81"><span class="nav-number">1.2.1.1.</span> <span class="nav-text">源码</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%AD%BB%E9%94%81"><span class="nav-number">1.2.2.</span> <span class="nav-text">死锁</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E7%A0%81-1"><span class="nav-number">1.2.2.1.</span> <span class="nav-text">源码</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Mach-mvk"><span class="nav-number">1.2.3.</span> <span class="nav-text">Mach [mʌk]</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%AD%A5%E9%AA%A4"><span class="nav-number">1.2.3.1.</span> <span class="nav-text">步骤</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E7%A0%81-2"><span class="nav-number">1.2.3.2.</span> <span class="nav-text">源码</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#NSException%E5%BC%82%E5%B8%B8"><span class="nav-number">1.2.4.</span> <span class="nav-text">NSException异常</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BF%A1%E5%8F%B7%E9%87%8FSignal"><span class="nav-number">1.2.5.</span> <span class="nav-text">信号量Signal</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%88%86%E7%B1%BB"><span class="nav-number">1.2.5.1.</span> <span class="nav-text">分类</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%81%87%E5%88%B0%E7%9A%84%E9%97%AE%E9%A2%98"><span class="nav-number">1.2.5.2.</span> <span class="nav-text">遇到的问题</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%97%AE%E9%A2%98"><span class="nav-number">1.2.5.3.</span> <span class="nav-text">问题</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#UNIX%E4%BF%A1%E5%8F%B7"><span class="nav-number">1.2.6.</span> <span class="nav-text">UNIX信号</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%83%B5%E5%B0%B8%E5%AF%B9%E8%B1%A1%E6%A3%80%E6%B5%8B"><span class="nav-number">1.2.7.</span> <span class="nav-text">僵尸对象检测</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E3%80%81%E7%B3%BB%E7%BB%9F%E7%8A%B6%E6%80%81"><span class="nav-number">1.3.</span> <span class="nav-text">二、系统状态</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#AppState"><span class="nav-number">1.3.1.</span> <span class="nav-text">AppState</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B3%BB%E7%BB%9F%E4%BF%A1%E6%81%AF"><span class="nav-number">1.3.2.</span> <span class="nav-text">系统信息</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#User%E4%B8%8A%E6%8A%A5"><span class="nav-number">1.3.3.</span> <span class="nav-text">User上报</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E3%80%81%E4%B8%8A%E6%8A%A5"><span class="nav-number">1.4.</span> <span class="nav-text">三、上报</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B5%81%E7%A8%8B-%E7%BB%93%E6%9E%84"><span class="nav-number">1.4.1.</span> <span class="nav-text">流程 &amp; 结构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8A%A8%E6%80%81%E5%BA%93%E5%9C%B0%E5%9D%80%E8%8E%B7%E5%8F%96-ASLR"><span class="nav-number">1.4.2.</span> <span class="nav-text">动态库地址获取(ASLR)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BA%BF%E7%A8%8B%E4%BF%A1%E6%81%AF%E8%8E%B7%E5%8F%96"><span class="nav-number">1.4.3.</span> <span class="nav-text">线程信息获取</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%9A%E7%BA%BF%E7%A8%8B%E8%8E%B7%E5%8F%96"><span class="nav-number">1.4.3.1.</span> <span class="nav-text">多线程获取</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%97%AE%E9%A2%98-1"><span class="nav-number">1.4.3.2.</span> <span class="nav-text">问题</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%9A%E7%BA%BF%E7%A8%8B%E4%B8%AD%E7%9A%84%E5%AF%84%E5%AD%98%E5%99%A8%E8%8E%B7%E5%8F%96"><span class="nav-number">1.4.3.3.</span> <span class="nav-text">多线程中的寄存器获取</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%BA%BF%E7%A8%8B%E5%9B%9E%E6%BA%AF"><span class="nav-number">1.4.3.4.</span> <span class="nav-text">线程回溯</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%88%A4%E6%96%AD%E6%98%AF%E5%90%A6%E6%98%AF%E6%A0%88%E6%BA%A2%E5%87%BA"><span class="nav-number">1.4.3.5.</span> <span class="nav-text">判断是否是栈溢出</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%8E%B7%E5%8F%96%E7%B3%BB%E7%BB%9F%E5%A4%9A%E7%BA%BF%E7%A8%8B%E7%9B%B8%E5%85%B3API%E4%B8%8E%E7%9F%A5%E8%AF%86"><span class="nav-number">2.</span> <span class="nav-text">获取系统多线程相关API与知识</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="沙睿"
+      src="/images/avatar.png">
+  <p class="site-author-name" itemprop="name">沙睿</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">13</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rui4u" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rui4u" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:sr_sharui4u@gmail.com" title="E-Mail → mailto:sr_sharui4u@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">沙睿</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://mist.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Mist</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="//cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"></script>
+<script src="//cdn.jsdelivr.net/npm/instantsearch.js@4/dist/instantsearch.production.min.js"></script>
+<script src="/js/algolia-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.css">
+
+<script>
+NexT.utils.loadComments(document.querySelector('#gitalk-container'), () => {
+  NexT.utils.getScript('//cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.js', () => {
+    var gitalk = new Gitalk({
+      clientID    : '5e02fda8fd31c994f16a',
+      clientSecret: '46b5db7b35b63613c731cd4e789b969287caee31',
+      repo        : 'rui4u.github.io',
+      owner       : 'Rui4u',
+      admin       : ['Rui4u'],
+      id          : '37f3c4de03fd75cb9e0f468054c7135c',
+        language: '',
+      distractionFreeMode: true
+    });
+    gitalk.render('gitalk-container');
+  }, window.Gitalk);
+});
+</script>
+
+</body>
+</html>
