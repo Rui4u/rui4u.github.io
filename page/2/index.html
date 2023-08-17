@@ -21,30 +21,27 @@
   </script>
 
   <meta property="og:type" content="website">
-<meta property="og:title" content="project">
-<meta property="og:url" content="http://example.com/project/index.html">
+<meta property="og:title" content="沙睿的小站">
+<meta property="og:url" content="http://example.com/page/2/index.html">
 <meta property="og:site_name" content="沙睿的小站">
 <meta property="og:locale">
-<meta property="article:published_time" content="2023-08-17T02:37:29.000Z">
-<meta property="article:modified_time" content="2023-08-17T02:48:50.783Z">
 <meta property="article:author" content="沙睿">
 <meta name="twitter:card" content="summary">
 
-<link rel="canonical" href="http://example.com/project/">
+<link rel="canonical" href="http://example.com/page/2/">
 
 
 <script id="page-configurations">
   // https://hexo.io/docs/variables.html
   CONFIG.page = {
     sidebar: "",
-    isHome : false,
+    isHome : true,
     isPost : false,
     lang   : 'zh'
   };
 </script>
 
-  <title>project | 沙睿的小站
-</title>
+  <title>沙睿的小站</title>
   
 
 
@@ -156,64 +153,98 @@
       <div class="main-inner">
         <div class="content-wrap">
           
-  
-  
 
-          <div class="content page posts-expand">
+          <div class="content index posts-expand">
             
-
-    
-    
-    
-    <div class="post-block" lang="zh">
-      <header class="post-header">
-
-<h1 class="post-title" itemprop="name headline">project
-</h1>
-
-<div class="post-meta">
+      
   
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/02/01/%E7%AC%AC0%E7%AB%A0%20%E6%B1%87%E7%BC%96%E5%B7%A5%E5%85%B7%E4%B9%8BDosBox/">
 
-</div>
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="沙睿">
+      <meta itemprop="description" content="">
+    </span>
 
-</header>
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="沙睿的小站">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/02/01/%E7%AC%AC0%E7%AB%A0%20%E6%B1%87%E7%BC%96%E5%B7%A5%E5%85%B7%E4%B9%8BDosBox/" class="post-title-link" itemprop="url">第0章 汇编工具之DosBox.md</a>
+        </h2>
 
-      
-      
-      
-      <div class="post-body">
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-02-01 18:00:00" itemprop="dateCreated datePublished" datetime="2022-02-01T18:00:00+08:00">2022-02-01</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-04-06 10:42:40" itemprop="dateModified" datetime="2022-04-06T10:42:40+08:00">2022-04-06</time>
+              </span>
+
           
 
-<<!DOCTYPE html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title></title>
-	<h1>测试 </h1>
-	<a href="/index.html"> 哈哈哈 </a>
-	<link rel="stylesheet" type="text/css" href="../../public/index.html"> sdfsdfsd
-</head>
-<body>
+        </div>
+      </header>
 
-</body>
-</html>
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
 
-      </div>
       
-      
+          <pre><code>### mac上安装debug环境
+</code></pre>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">下载DosBox和常用的汇编工具，在下方的百度云中下载。</span><br><span class="line">链接: https://pan.baidu.com/s/1s-Ot_C7yVqQ7g3NI0kB32g 提取码: r2l2</span><br><span class="line">DosBox也可以在官网下载`https://www.dosbox.com/`</span><br></pre></td></tr></table></figure>
+<ol>
+<li>下载后解压，把DosBox放入Mac的<code>应用程序</code>中,然后解压<code>常用汇编工具</code>，压缩后放到任意路径。例如<code>~/DosBoxToos</code></li>
+<li>打开DosBox 执行指令<code>mount C ~/DosBoxTools</code> 挂载<code>~/DosBoxTools</code>为C盘</li>
+<li>在DosBox中执行<code>C:</code>跳转到C盘</li>
+<li>现在就可以执行debug命令了</li>
+</ol>
+<blockquote>
+<p>其中第二步，可以在<code>~/Library/Preferences/Dosbox 0.74 Preferences</code>中配置，避免每次都要挂载。</p>
+</blockquote>
+<p><img src="/media/16396228379712.jpg"></p>
+<h3 id="debug常用指令"><a href="#debug常用指令" class="headerlink" title="debug常用指令"></a>debug常用指令</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">R: 查看、改变CPU寄存器的内容</span><br><span class="line">D: 查看内存中的内容</span><br><span class="line">E: 改写内存中的内容</span><br><span class="line">U: 将内存中的机器指令翻译成汇编指令</span><br><span class="line">T: 执行一条机器指令</span><br><span class="line">A: 以汇编的格式在内存中写入一条机器指令</span><br><span class="line">G: G 1002 程序执行一直到IP=1002</span><br><span class="line">P: 遇到loop时候 会执行完当前的LOOP</span><br></pre></td></tr></table></figure>
+
+
       
     </div>
-    
 
     
     
     
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+
+  
+  <nav class="pagination">
+    <a class="extend prev" rel="prev" href="/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="page-number current">2</span>
+  </nav>
+
 
 
           </div>
           
-    <div class="comments" id="gitalk-container"></div>
 
 <script>
   window.addEventListener('tabs:register', () => {
@@ -260,7 +291,6 @@
 
       <!--noindex-->
       <div class="post-toc-wrap sidebar-panel">
-          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link"><span class="nav-number">1.</span> <span class="nav-text">测试 </span></a></li></ol></div>
       </div>
       <!--/noindex-->
 
@@ -368,25 +398,6 @@
 
   
 
-<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.css">
-
-<script>
-NexT.utils.loadComments(document.querySelector('#gitalk-container'), () => {
-  NexT.utils.getScript('//cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.js', () => {
-    var gitalk = new Gitalk({
-      clientID    : '5e02fda8fd31c994f16a',
-      clientSecret: '46b5db7b35b63613c731cd4e789b969287caee31',
-      repo        : 'rui4u.github.io',
-      owner       : 'sr_sharui@qq.com',
-      admin       : ['Rui4u'],
-      id          : 'df469299ee469086a3189f69c1bf3242',
-        language: 'zh-CN',
-      distractionFreeMode: true
-    });
-    gitalk.render('gitalk-container');
-  }, window.Gitalk);
-});
-</script>
 
 </body>
 </html>
